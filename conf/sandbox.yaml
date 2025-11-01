@@ -1,0 +1,11 @@
+# conf/sandbox.yaml
+rootfs: /srv/sbx/rootfs
+jobs_dir: /srv/sbx/jobs
+defaults:
+  timeout_s: 8
+  enable_loopback: false
+  noexec_work: true
+  bind_full_etc: false
+  seccomp:
+    enabled: true
+    policy: conf/seccomp.min.yaml

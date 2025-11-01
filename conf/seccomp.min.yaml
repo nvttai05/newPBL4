@@ -1,0 +1,20 @@
+default_action: ERRNO   # permissive: vi phạm trả về EPERM; muốn strict: KILL_PROCESS
+errno: 1
+
+allow:
+  - read; - write; - close; - fstat; - lseek; - mmap; - mprotect; - munmap; - brk
+  - rt_sigreturn; - rt_sigaction; - sigaltstack; - rt_sigprocmask
+  - clock_gettime; - nanosleep; - getrandom
+  - exit; - exit_group
+  - futex; - madvise; - prlimit64; - arch_prctl; - set_tid_address; - set_robust_list
+  - getpid; - getppid; - getuid; - geteuid; - getgid; - getegid; - uname
+  - openat; - access; - stat; - fstat; - readlink; - getdents64; - fcntl
+  - dup; - dup2; - getcwd; - statfs; - mremap; - getrlimit
+  - epoll_create1; - epoll_ctl; - epoll_wait; - poll
+
+block:
+  - ptrace; - bpf; - keyctl; - mount; - umount2; - reboot
+  - init_module; - finit_module; - kexec_file_load; - swapon; - swapoff
+  - setns; - perf_event_open; - chroot
+  - socket      # nếu cần network nội bộ, xoá dòng này và thêm socket/connect/sendto/recvfrom vào allow
+  - clone3

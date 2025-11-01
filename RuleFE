@@ -1,0 +1,173 @@
+1) Base URL & CORS
+
+Base URL (dev): http://127.0.0.1:8000
+
+Bật CORS cho app RN (hoặc tạm * trong dev):
+
+# src/sandbox/api/app.py (ví dụ)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="Sandbox API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # DEV: mở rộng; PROD: chỉ định domain app RN
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+2) Hợp đồng API (FE dùng y như này)
+2.1 Tạo job
+
+POST /jobs
+Body (JSON):
+
+{
+  "entry": "main.py",
+  "code": "print('hello')"
+}
+
+
+200 OK →
+
+{ "job_id": "e.g. 6e9de13fe760" }
+
+2.2 Chạy job
+
+POST /jobs/{job_id}/run
+200 OK → {"ok": true}
+
+Nếu sandbox chặn (vượt memory/cpu/pids), BE vẫn trả 200 khi “đã nhận lệnh chạy”; trạng thái/thất bại xem ở step 2.3/2.4.
+
+2.3 Lấy trạng thái job
+
+GET /jobs/{job_id}
+200 OK →
+
+{
+  "id": "6e9de13fe760",
+  "status": "QUEUED|RUNNING|FINISHED|FAILED",
+  "exit_code": 0,
+  "reason": null,
+  "created_at": "2025-10-28T...",
+  "started_at": "2025-10-28T...",
+  "finished_at": "2025-10-28T...",
+  "entry": "main.py",
+  "lang": "python"
+}
+
+2.4 Lấy logs
+
+GET /jobs/{job_id}/logs
+200 OK →
+
+{
+  "stdout": "hello sandbox\n",
+  "stderr": ""
+}
+
+
+Nếu sandbox kill vì limit: status=FAILED, exit_code=-9, stdout có thể in dở hoặc trống, stderr thường trống (SIGKILL).
+
+3) Quy ước lỗi/limit để FE hiển thị
+
+status="FAILED" + exit_code != 0 → coi là chạy thất bại.
+
+Một số pattern thường gặp:
+
+exit_code = -9 → bị SIGKILL, hay gặp khi vượt memory.max/cpu.max.
+
+stderr có traceback → lỗi runtime Python của user code.
+
+FE nên hiển thị:
+
+Trạng thái sống: QUEUED / RUNNING / FINISHED / FAILED.
+
+Kết quả: stdout/stderr (dạng console).
+
+Mốc thời gian: created/started/finished.
+
+4) Cách FE gọi API (React Native)
+4.1 Service nhỏ (fetch)
+// api.ts
+const BASE = "http://127.0.0.1:8000";
+
+export async function createJob(entry: string, code: string) {
+  const res = await fetch(`${BASE}/jobs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entry, code }),
+  });
+  if (!res.ok) throw new Error("Create job failed");
+  return res.json(); // { job_id }
+}
+
+export async function runJob(jobId: string) {
+  const res = await fetch(`${BASE}/jobs/${jobId}/run`, { method: "POST" });
+  if (!res.ok) throw new Error("Run job failed");
+  return res.json(); // { ok: true }
+}
+
+export async function getJob(jobId: string) {
+  const res = await fetch(`${BASE}/jobs/${jobId}`);
+  if (!res.ok) throw new Error("Get job failed");
+  return res.json();
+}
+
+export async function getLogs(jobId: string) {
+  const res = await fetch(`${BASE}/jobs/${jobId}/logs`);
+  if (!res.ok) throw new Error("Get logs failed");
+  return res.json(); // { stdout, stderr }
+}
+
+4.2 Hook chạy/polling đơn giản
+// useRunJob.ts
+import { useEffect, useState } from "react";
+import { createJob, runJob, getJob, getLogs } from "./api";
+
+export function useRunJob(entry: string, code: string) {
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("IDLE");
+  const [stdout, setStdout] = useState<string>("");
+  const [stderr, setStderr] = useState<string>("");
+
+  async function start() {
+    setStatus("CREATING");
+    const { job_id } = await createJob(entry, code);
+    setJobId(job_id);
+    await runJob(job_id);
+    setStatus("RUNNING");
+  }
+
+  useEffect(() => {
+    if (!jobId || (status !== "RUNNING" && status !== "CREATING")) return;
+    const t = setInterval(async () => {
+      const s = await getJob(jobId);
+      setStatus(s.status);
+      if (s.status === "FINISHED" || s.status === "FAILED") {
+        const logs = await getLogs(jobId);
+        setStdout(logs.stdout || "");
+        setStderr(logs.stderr || "");
+      }
+    }, 600); // poll 0.6s
+    return () => clearInterval(t);
+  }, [jobId, status]);
+
+  return { jobId, status, stdout, stderr, start };
+}
+
+4.3 UI gợi ý (RN)
+
+Nút Run → gọi start().
+
+Hiển thị status.
+
+Khi xong: render 2 tab STDOUT/STDERR (monospace).
+
+Nếu status="FAILED":
+
+Nếu exit_code == -9: hiển thị “Bị giới hạn bởi sandbox (RAM/CPU).”
+
+Nếu stderr có traceback: hiển thị lỗi Python.

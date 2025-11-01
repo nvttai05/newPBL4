@@ -1,0 +1,13 @@
+# conf/limits.yaml
+enabled: true
+
+memory:
+  max: 134217728      # 128 MB
+  swap_max: 0
+  oom_group: true
+
+pids:
+  max: 64
+
+cpu:
+  max: "10000 10000"  # nghĩa là 1 core đầy đủ
