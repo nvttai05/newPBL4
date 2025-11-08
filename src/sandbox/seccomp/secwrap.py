@@ -1,45 +1,23 @@
 # src/sandbox/seccomp/secwrap.py
-from __future__ import annotations
-import os, sys, ctypes
+import sys, argparse, runpy
 from pathlib import Path
-from .seccomp_helper import create_seccomp_from_config, create_seccomp
-
-PR_SET_NO_NEW_PRIVS = 38
-libc = ctypes.CDLL(None, use_errno=True)
-
-def set_no_new_privs():
-    if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
-        e = ctypes.get_errno()
-        raise OSError(e, "prctl(PR_SET_NO_NEW_PRIVS) failed")
+from .seccomp_helper import create_seccomp_from_config
 
 def main():
-    args = sys.argv[1:]
-    cfg = None
-    if "--config" in args:
-        i = args.index("--config")
-        cfg = args[i+1]
-        del args[i:i+2]
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", required=True)
+    ap.add_argument("--", dest="cmd", nargs=argparse.REMAINDER, default=[])
+    args = ap.parse_args()
 
-    if "--" not in args:
-        print("secwrap: usage: secwrap.py [--config file] -- <cmd> [args...]", file=sys.stderr)
-        sys.exit(97)
-    k = args.index("--")
-    real_cmd = args[k+1:]
+    # Áp profile
+    f = Path(args.config)
+    filt = create_seccomp_from_config(f.read_text(encoding="utf-8"))
+    filt.load()  # bật filter
 
-    # 1) no_new_privs
-    set_no_new_privs()
-
-    # 2) seccomp
-    ok = False
-    if cfg and Path(cfg).exists():
-        ok = create_seccomp_from_config(cfg)
-    else:
-        ok = create_seccomp()
-    if not ok:
-        print("secwrap: WARNING: seccomp NOT enforced (fallback).", file=sys.stderr)
-
-    # 3) exec
-    os.execvp(real_cmd[0], real_cmd)
+    if args.cmd:
+        # exec chương trình user
+        import os
+        os.execvp(args.cmd[0], args.cmd)
 
 if __name__ == "__main__":
     main()

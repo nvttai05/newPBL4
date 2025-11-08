@@ -39,3 +39,7 @@ def status(job_id: str):
 @app.get("/jobs/{job_id}/logs")
 def logs(job_id: str):
     return orc.logs(job_id)
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Sandbox API"}
+

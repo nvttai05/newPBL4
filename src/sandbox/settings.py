@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import yaml
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,38 +34,53 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
-    # load base from env (SBX_*), sau đó merge YAML nếu có
+    # 0) Nạp base từ env SBX_*
     s = Settings()
 
-    # 1) sandbox.yaml (đường dẫn có thể override bằng env SANDBOX_CONF)
+    # 1) Đọc conf/sandbox.yaml (hoặc SANDBOX_CONF)
     sbx_yaml = os.environ.get("SANDBOX_CONF", "conf/sandbox.yaml")
-    p = Path(sbx_yaml)
-    if p.exists():
-        d = yaml.safe_load(p.read_text()) or {}
-        defs = d.get("defaults", {}) if isinstance(d, dict) else {}
-        # Lấy block seccomp (nếu có)
-        sec = defs.get("seccomp", {}) if isinstance(defs, dict) else {}
+    try:
+        with open(sbx_yaml, "r") as f:
+            data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
 
-        # dùng model_copy(update=...) cho đúng kiểu pydantic v2
-        s = s.model_copy(
-            update={
-                "rootfs": Path(d.get("rootfs", s.rootfs)),
-                "jobs_dir": Path(d.get("jobs_dir", s.jobs_dir)),
-                "default_timeout_s": int(defs.get("timeout_s", s.default_timeout_s)),
-                "enable_loopback": bool(defs.get("enable_loopback", s.enable_loopback)),
-                "noexec_work": bool(defs.get("noexec_work", s.noexec_work)),
-                "bind_full_etc": bool(defs.get("bind_full_etc", s.bind_full_etc)),
-                # --- NEW: seccomp (đọc từ defaults.seccomp.*) ---
-                "seccomp_enabled": bool(sec.get("enabled", s.seccomp_enabled)),
-                "seccomp_policy": Path(sec.get("policy", s.seccomp_policy)),
-            }
-        )
+    defaults = data.get("defaults") or {}
+    if not isinstance(defaults, dict):
+        defaults = {}
 
-    # 2) limits.yaml
+    # block seccomp trong defaults
+    sec = defaults.get("seccomp") or {}
+    if not isinstance(sec, dict):
+        sec = {}
+
+    # 2) Merge vào Settings (dùng đúng kiểu Path/bool/int)
+    s = s.model_copy(
+        update={
+            "rootfs": Path(str(data.get("rootfs", s.rootfs))),
+            "jobs_dir": Path(str(data.get("jobs_dir", s.jobs_dir))),
+            "default_timeout_s": int(defaults.get("timeout_s", s.default_timeout_s)),
+            "enable_loopback": bool(defaults.get("enable_loopback", s.enable_loopback)),
+            "noexec_work": bool(defaults.get("noexec_work", s.noexec_work)),
+            "bind_full_etc": bool(defaults.get("bind_full_etc", s.bind_full_etc)),
+            "seccomp_enabled": bool(sec.get("enabled", s.seccomp_enabled)),
+            "seccomp_policy": Path(str(sec.get("policy", s.seccomp_policy))),
+        }
+    )
+
+    # 3) Đọc conf/limits.yaml (tùy chọn)
     limits: Dict[str, Any] = {}
-    if s.limits_file.exists():
-        limits = yaml.safe_load(s.limits_file.read_text()) or {}
-    # cập nhật lại settings với trường limits
-    s = s.model_copy(update={"limits": limits})
+    try:
+        if s.limits_file.exists():
+            limits_raw = yaml.safe_load(s.limits_file.read_text()) or {}
+            if isinstance(limits_raw, dict):
+                limits = limits_raw
+    except Exception:
+        # Không làm app sập vì limits lỗi — giữ mặc định rỗng
+        limits = {}
 
+    s = s.model_copy(update={"limits": limits})
     return s
+

@@ -31,10 +31,10 @@ echo "+cpu"    | sudo tee "$CG/sbx/cgroup.subtree_control" >/dev/null || true
 
 
 Check lại
-echo "service subtree: $(sudo cat $CG/cgroup.subtree_control)"
+`echo "service subtree: $(sudo cat $CG/cgroup.subtree_control)"
 echo "sbx subtree:     $(sudo cat $CG/sbx/cgroup.subtree_control)"
 echo "root PIDs:";     sudo cat $CG/cgroup.procs || true
-echo "payload PIDs:";  sudo cat $CG/payload/cgroup.procs || true
+echo "payload PIDs:";  sudo cat $CG/payload/cgroup.procs || true`
 
 Kỳ vọng
 service subtree: memory pids cpu
@@ -58,3 +58,28 @@ curl -sS -i -X POST "127.0.0.1:8000/jobs/$jid/run"
 
 curl -sS "127.0.0.1:8000/jobs/$jid" | jq .jid" | jq .
 curl -sS "127.0.0.1:8000/jobs/$jid/logs" | jq .
+
+
+
+`resp=$(curl -sS -X POST 127.0.0.1:8000/jobs \
+  -H 'content-type: application/json' \
+  -d '{"code":"print(\"hello sandbox\")","entry":"main.py"}')
+
+echo "RAW: $resp"
+
+# Trích xuất job_id từ response
+jid=$(python3 -c 'import sys, json; print(json.loads(sys.stdin.read())["job_id"])' <<< "$resp")
+echo "jid=$jid"
+
+# Chạy job
+curl -sS -i -X POST "127.0.0.1:8000/jobs/$jid/run"
+
+# Kiểm tra trạng thái job
+curl -sS "127.0.0.1:8000/jobs/$jid" | jq .jid
+curl -sS "127.0.0.1:8000/jobs/$jid/logs" | jq .`
+
+
+#Reload & test
+sudo systemctl daemon-reload
+sudo systemctl restart sandbox.service
+sudo systemctl status sandbox.service --no-pager -l

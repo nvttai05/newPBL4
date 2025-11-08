@@ -2,12 +2,12 @@
 enabled: true
 
 memory:
-  max: 134217728      # 128 MB
-  swap_max: 0
+  max: 536870912      # 512 MB
+  swap_max: 536870912 # 512 MB
   oom_group: true
 
 pids:
-  max: 64
+  max: 256
 
 cpu:
   max: "10000 10000"  # nghĩa là 1 core đầy đủ
