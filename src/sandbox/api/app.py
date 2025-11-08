@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException 
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ..services.job_store import JobStore
 from ..services.orchestrator import Orchestrator
@@ -6,6 +7,14 @@ from ..services.orchestrator import Orchestrator
 app = FastAPI(title="Sandbox Pro-Lite")
 store = JobStore()
 orc = Orchestrator(store)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5500", "http://127.0.0.1:8080", "http://localhost:63342",],  # Đảm bảo các cổng frontend đúng
+    allow_credentials=True,
+    allow_methods=["*"],  # Cho phép tất cả các phương thức như GET, POST, PUT, DELETE...
+    allow_headers=["*"],  # Cho phép tất cả các headers
+)
+
 
 class JobReq(BaseModel):
     code: str
