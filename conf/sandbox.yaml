@@ -7,5 +7,5 @@ defaults:
   noexec_work: true
   bind_full_etc: false
   seccomp:
-    enabled: true
+    enabled: false
     policy: conf/seccomp.min.yaml

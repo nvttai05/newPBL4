@@ -4,6 +4,7 @@ from pathlib import Path
 from .job_store import Job, JobStatus, JobStore
 from .artifact_store import ArtifactStore
 from ..executor.base import ExecSpec
+# from ..executor.cgroups import assert_controllers_on
 from ..executor.ns_chroot import NsChrootExecutor
 from ..settings import load_settings
 from ..runners.python_runner import PythonRunner
@@ -30,6 +31,7 @@ class Orchestrator:
         return job_id
 
     def run(self, job_id: str):
+        # assert_controllers_on()
         job = self.store.get(job_id); assert job, "job not found"
         job.status = JobStatus.RUNNING; job.started_at = datetime.utcnow(); self.store.update(job)
 

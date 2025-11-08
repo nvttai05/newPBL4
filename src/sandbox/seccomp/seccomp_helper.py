@@ -8,8 +8,20 @@ try:
     import yaml  # optional, but convenient
 except Exception:
     yaml = None
-
-import pyseccomp as sc  # bạn đã cài ở bước C
+# src/sandbox/seccomp/seccomp_helper.py
+try:
+    import pyseccomp as sc   # bản này hay gặp trên PyPI
+    SC_BINDING = "pyseccomp"
+except ModuleNotFoundError:
+    try:
+        import seccomp as sc  # bản từ python-libseccomp
+        SC_BINDING = "seccomp"
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "No libseccomp Python binding found. Install one of:\n"
+            "  pip install pyseccomp   (requires libseccomp-dev)\n"
+            "  or pip install seccomp"
+        ) from e
 
 # Map string action -> pyseccomp action
 def _action_from_string(s: str, errno_val: int):

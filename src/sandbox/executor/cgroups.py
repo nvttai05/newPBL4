@@ -2,11 +2,54 @@
 from __future__ import annotations
 from pathlib import Path
 import os, time
+import subprocess  # NEW
+
 
 CGROOT = Path("/sys/fs/cgroup")
+# --- NEW: base path cố định cho service ---
+CG_SERVICE_BASE = Path("/sys/fs/cgroup/system.slice/sandbox.service")
+CG_SBX_BASE     = CG_SERVICE_BASE / "sbx"
+
+def _write_then_check(p: Path, val: str | int):
+    val = str(val)
+    p.write_text(val)
+    back = p.read_text().strip()
+    if back != val:
+        # In/raise để biết chính xác kernel đã nhận gì
+        raise RuntimeError(f"[cgroup] write {p}='{val}' but read-back='{back}'")
+
+# def _ensure_cgroup_job(job_id: str) -> Path:
+#     """
+#     Gọi script mkjob để tạo /system.slice/sandbox.service/sbx/<job_id> và cấp ACL
+#     (sudoers đã cho phép chạy không cần mật khẩu).
+#     """
+#     env = os.environ.copy()  # để SBX_USER từ unit (nếu có) truyền xuống
+#     subprocess.run(
+#         ["sudo", "/usr/local/bin/sbx-cg-mkjob.sh", job_id],
+#         check=True,
+#         env=env,
+#     )
+#     return CG_SBX_BASE / job_id
+def _ensure_cgroup_job(job_id: str) -> Path:
+    """
+    Service chạy root => tạo leaf trực tiếp, không cần sudo/script/ACL.
+    """
+    leaf = CG_SBX_BASE / job_id
+    leaf.mkdir(parents=True, exist_ok=True)
+    return leaf
+
+
 
 def ensure_v2():
     assert (CGROOT / "cgroup.controllers").exists(), "cgroup v2 is required"
+
+def assert_controllers_on():
+    base = Path("/sys/fs/cgroup/system.slice/sandbox.service")
+    need = {"cpu", "memory", "pids"}
+    svc = set((base / "cgroup.subtree_control").read_text().split())
+    sbx = set((base / "sbx" / "cgroup.subtree_control").read_text().split())
+    if not need.issubset(svc) or not need.issubset(sbx):
+        raise RuntimeError(f"cgroup controllers not enabled: svc={svc} sbx={sbx}")
 
 def _self_cgroup_base() -> Path:
     # unified v2: '0::/<relative>'
@@ -28,8 +71,27 @@ def _env_base() -> Path | None:
     return base
 
 def get_sbx_base() -> Path:
-    # Ưu tiên SBX_CGROUP_BASE (ví dụ …/sandbox.service/sbx), nếu không có thì dùng cgroup hiện tại + /sbx
-    return _env_base() or (_self_cgroup_base() / "sbx")
+    # Ưu tiên SBX_CGROUP_BASE (ví dụ …/sandbox.service/sbx)
+    env_base = _env_base()
+    if env_base:
+        return env_base
+
+    # Không có env: suy từ /proc/self/cgroup. Nếu đang ở payload/, nhảy về service/ rồi vào sbx/
+    self_base = _self_cgroup_base()  # ví dụ: /sys/fs/cgroup/system.slice/sandbox.service/payload
+    parts = self_base.parts
+    try:
+        # Tìm cụm .../system.slice/sandbox.service ở path hiện tại
+        idx = parts.index("system.slice")
+        if idx + 1 < len(parts) and parts[idx + 1] == "sandbox.service":
+            # Lấy .../system.slice/sandbox.service, bỏ payload đi nếu có
+            service_base = Path("/".join(parts[: idx + 2]))  # /sys/fs/cgroup/system.slice/sandbox.service
+            return service_base / "sbx"
+    except ValueError:
+        pass
+
+    # Fallback cũ: /<self>/sbx
+    return self_base / "sbx"
+
 
 def _enable_controllers(node: Path):
     """Bật controller cho children ở node (yêu cầu node rỗng theo cgroup v2)."""
@@ -47,40 +109,57 @@ def _enable_controllers(node: Path):
     (node / "cgroup.subtree_control").write_text(" ".join(want))
 
 def create_leaf(job_id: str) -> Path:
+    ensure_v2()
+    assert_controllers_on()
+    # 1) Xác định base sbx (đã fix tránh /payload)
     base = get_sbx_base()
     base.mkdir(parents=True, exist_ok=True)
-    # Đảm bảo base có controller cho con
+
+    # 2) Bật controller cho children ở sbx base (yêu cầu sbx base rỗng – điều kiện bạn đã đảm bảo trong unit/scripts)
     try:
         _enable_controllers(base)
     except PermissionError:
-        # để lỗi nổi bọt ra API thay vì EPERM mập mờ khi ghi memory.max ở leaf
+        # Nổ lỗi rõ ràng để caller biết tình trạng còn PID ở sbx base
         raise
-    leaf = base / job_id
+
+    # 3) GỌI mkjob để kernel sinh leaf & cấp ACL ghi cho user service
+    leaf = _ensure_cgroup_job(job_id)
     leaf.mkdir(parents=True, exist_ok=True)
+
     return leaf
+
 
 def set_limits(leaf: Path, limits: dict):
     """
     Hỗ trợ conf/limits.yaml dạng:
       memory: {max: <bytes|max>, swap_max: <bytes|max>, oom_group: <bool>}
       pids:   {max: <n|max>}
-      cpu:    {max: "<quota> <period>"}  # ví dụ "10000 10000"
+      cpu:    {max: "<quota> <period>"}  # ví dụ "10000 10000" hoặc "max 100000"
     """
-    mem = (limits.get("memory") or {}).get("max")
-    if mem is not None:
-        (leaf / "memory.max").write_text(str(mem))
-    swap = (limits.get("memory") or {}).get("swap_max")
-    if swap is not None:
-        (leaf / "memory.swap.max").write_text(str(swap))
-    oomg = (limits.get("memory") or {}).get("oom_group")
-    if oomg is not None:
-        (leaf / "memory.oom.group").write_text("1" if oomg else "0")
-    pids = (limits.get("pids") or {}).get("max")
-    if pids is not None:
-        (leaf / "pids.max").write_text(str(pids))
-    cpu = (limits.get("cpu") or {}).get("max")
-    if cpu is not None:
-        (leaf / "cpu.max").write_text(str(cpu))
+    # ---- memory ----
+    mem_cfg = (limits.get("memory") or {})
+    if "max" in mem_cfg:
+        _write_then_check(leaf / "memory.max", mem_cfg["max"])
+    if "swap_max" in mem_cfg:
+        try:
+            _write_then_check(leaf / "memory.swap.max", mem_cfg["swap_max"])
+        except FileNotFoundError:
+            # hệ thống không bật memcg swap: bỏ qua
+            pass
+    if "oom_group" in mem_cfg:
+        _write_then_check(leaf / "memory.oom.group", 1 if mem_cfg["oom_group"] else 0)
+
+    # ---- pids ----
+    pids_cfg = (limits.get("pids") or {})
+    if "max" in pids_cfg:
+        _write_then_check(leaf / "pids.max", pids_cfg["max"])
+
+    # ---- cpu ----
+    cpu_cfg = (limits.get("cpu") or {})
+    if "max" in cpu_cfg:
+        # cpu.max cho phép chuỗi "quota period" (vd: "10000 10000") hoặc "max 100000"
+        (leaf / "cpu.max").write_text(str(cpu_cfg["max"]))
+
 
 def attach(leaf: Path, pid: int):
     (leaf / "cgroup.procs").write_text(str(pid))
