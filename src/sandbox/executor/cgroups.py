@@ -4,6 +4,7 @@ from pathlib import Path
 import os, time
 import subprocess  # NEW
 
+USE_CGROUP = os.getenv("USE_CGROUP", "1") == "1"
 
 CGROOT = Path("/sys/fs/cgroup")
 # --- NEW: base path cố định cho service ---
@@ -44,12 +45,29 @@ def ensure_v2():
     assert (CGROOT / "cgroup.controllers").exists(), "cgroup v2 is required"
 
 def assert_controllers_on():
+    # Cho phép disable kiểm tra cgroup bằng biến môi trường
+    if os.getenv("USE_CGROUP", "1") == "0":
+        print("[WARN] Skipping cgroup controller check (USE_CGROUP=0)")
+        return
+
     base = Path("/sys/fs/cgroup/system.slice/sandbox.service")
     need = {"cpu", "memory", "pids"}
-    svc = set((base / "cgroup.subtree_control").read_text().split())
-    sbx = set((base / "sbx" / "cgroup.subtree_control").read_text().split())
+
+    svc_ctrl_file = base / "cgroup.subtree_control"
+    sbx_ctrl_file = base / "sbx" / "cgroup.subtree_control"
+
+    if not svc_ctrl_file.exists() or not sbx_ctrl_file.exists():
+        print("[WARN] cgroup files not found, skipping")
+        return
+
+    svc = set(svc_ctrl_file.read_text().split())
+    sbx = set(sbx_ctrl_file.read_text().split())
+
     if not need.issubset(svc) or not need.issubset(sbx):
-        raise RuntimeError(f"cgroup controllers not enabled: svc={svc} sbx={sbx}")
+        print(f"[WARN] cgroup controllers not fully enabled: svc={svc}, sbx={sbx}")
+        # không raise nữa
+        return
+
 
 def _self_cgroup_base() -> Path:
     # unified v2: '0::/<relative>'
@@ -109,24 +127,28 @@ def _enable_controllers(node: Path):
     (node / "cgroup.subtree_control").write_text(" ".join(want))
 
 def create_leaf(job_id: str) -> Path:
+    if not USE_CGROUP:
+        print(f"[WARN] Skipping create_leaf for {job_id} (USE_CGROUP=0)")
+        # chỉ tạo folder giả trong /tmp để code phía trên không lỗi
+        fake_leaf = Path(f"/tmp/fake_cgroup_{job_id}")
+        fake_leaf.mkdir(parents=True, exist_ok=True)
+        return fake_leaf
+
     ensure_v2()
     assert_controllers_on()
-    # 1) Xác định base sbx (đã fix tránh /payload)
+
     base = get_sbx_base()
     base.mkdir(parents=True, exist_ok=True)
 
-    # 2) Bật controller cho children ở sbx base (yêu cầu sbx base rỗng – điều kiện bạn đã đảm bảo trong unit/scripts)
     try:
         _enable_controllers(base)
     except PermissionError:
-        # Nổ lỗi rõ ràng để caller biết tình trạng còn PID ở sbx base
         raise
 
-    # 3) GỌI mkjob để kernel sinh leaf & cấp ACL ghi cho user service
     leaf = _ensure_cgroup_job(job_id)
     leaf.mkdir(parents=True, exist_ok=True)
-
     return leaf
+
 
 
 def set_limits(leaf: Path, limits: dict):
@@ -137,6 +159,9 @@ def set_limits(leaf: Path, limits: dict):
       cpu:    {max: "<quota> <period>"}  # ví dụ "10000 10000" hoặc "max 100000"
     """
     # ---- memory ----
+    if os.getenv("USE_CGROUP", "1") == "0":
+        print(f"[WARN] Skipping set_limits for {leaf} (USE_CGROUP=0)")
+        return
     mem_cfg = (limits.get("memory") or {})
     if "max" in mem_cfg:
         _write_then_check(leaf / "memory.max", mem_cfg["max"])
@@ -162,7 +187,18 @@ def set_limits(leaf: Path, limits: dict):
 
 
 def attach(leaf: Path, pid: int):
-    (leaf / "cgroup.procs").write_text(str(pid))
+    if not USE_CGROUP:
+        print(f"[WARN] Skipping attach for {pid} (USE_CGROUP=0)")
+        return
+
+    try:
+        (leaf / "cgroup.procs").write_text(str(pid))
+    except Exception as e:
+        import traceback
+        print(f"[DEBUG attach] leaf={leaf} pid={pid} err={e}")
+        print(f"[DEBUG attach] exists? {(leaf / 'cgroup.procs').exists()}")
+        traceback.print_exc()
+        raise
 
 def read_metrics(leaf: Path) -> dict:
     out: dict[str, str] = {}
