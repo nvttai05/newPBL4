@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sandbox Runner</title>
+  <link rel="stylesheet" href="home.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Code Editor</h2>
+        <button id="run-btn">▶ Run</button>
+      </div>
+      <textarea id="code-input" contenteditable="true" spellcheck="false" placeholder="Nhập code Python tại đây..."></textarea>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="result">Kết quả</h2>
+        <div class="tabs">
+          <button class="tab" data-tab="stdout">STDOUT</button>
+          <button class="tab" data-tab="stderr">STDERR</button>
+          <button class="tab" data-tab="status">STATUS</button>
+        </div>
+      </div>
+      <div id="stdout" class="tab-content active">
+        <pre id="stdout-text">No result</pre>
+      </div>
+      <div id="stderr" class="tab-content">
+        <pre id="stderr-text">error</pre>
+      </div>
+      <div id="status" class="tab-content">
+        <pre id="status-text">Chưa chạy</pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

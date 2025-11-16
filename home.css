@@ -1,0 +1,158 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  font-family: "Consolas", monospace;
+  background-image: url("sandbox.jpg");
+  background-size: cover;
+  animation: moveBg 20s linear infinite;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+@keyframes moveBg {
+  0% {
+    background-position: center top;
+  }
+  100% {
+    background-position: center bottom;
+  }
+}
+
+.container {
+  width: 90%;
+  height: 90%;
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  backdrop-filter: blur(5px);
+}
+
+.panel {
+  width: 48%;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 20px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.panel-header h2 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0;
+}
+
+#run-btn {
+  background-color: rgb(108, 203, 130);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+.tabs button {
+  background-color: transparent;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+.panel-header button:hover {
+  background-color: transparent;
+}
+
+textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  padding: 10px;
+  font-size: 15px;
+  border-radius: 5px;
+  background-color: rgb(39, 40, 41);
+  color: #fff;
+  border: 1px solid #666;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  border: none;
+  /* padding: 10px; */
+}
+
+.tab {
+  background: #444;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  position: relative; /* Để dùng vị trí cho pseudo-element */
+}
+
+.tab.active {
+  background: transparent; /* Màu nền khi tab được chọn */
+  color: black;
+}
+.keyword {
+    color: #FF6347; /* Tô màu đỏ cho các từ khóa */
+    font-weight: bold;
+    background-color: rgba(255, 99, 71, 0.1); /* Thêm màu nền nhẹ để làm nổi bật */
+}
+
+.tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px; /* Độ dày của gạch chân */
+  background-color: rgb(108, 203, 130); /* Màu gạch chân */
+  transition: width 0.3s ease;
+}
+.tab:active::after {
+  width: 100%; /* Gạch chân sẽ mở rộng khi hover */
+}
+
+
+
+.tab:hover::after {
+  width: 100%; /* Gạch chân sẽ mở rộng khi hover */
+}
+
+.tab-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  background: #1e1e1e;
+  color: #fff;
+  border-radius: 5px;
+  padding: 10px;
+}
+.tab-content.active {
+  display: block;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Consolas", monospace;
+  color: #d4d4d4;
+}
