@@ -8,14 +8,38 @@ const stdouttab = document.getElementById("stdout");
 const stderrtab = document.getElementById("stderr");
 const statustab = document.getElementById("status");
 const tabs = document.querySelectorAll(".tab");
+const langselect = document.getElementById("language");
+const prevlang = document.getElementById("lang-prev");
+const nextlang = document.getElementById("lang-next");
+const highlight = document.getElementById("tab-highlight");
+prevlang.addEventListener("click", ()=> {
+    let index = langselect.selectedIndex;
+    if (index > 0){
+        langselect.selectedIndex = index -1;
+    }
+})
+nextlang.addEventListener("click", ()=> {
+    let index = langselect.selectedIndex;
+    if (index < langselect.options.length -1){
+        langselect.selectedIndex = index +1;
+    }
+})
 
 tabs.forEach(tab => {
     tab.addEventListener("click", () => {
         const tabname = tab.getAttribute("data-tab");
         ChangeTab(tabname);
+        moveHighlight(tab);
     });
 });
+function moveHighlight(activeTab) {
+    const rect = activeTab.getBoundingClientRect();
+    const containerRect = activeTab.parentElement.getBoundingClientRect();
 
+    highlight.style.width = rect.width + "px";
+    highlight.style.left = (rect.left - containerRect.left) + "px";
+}
+moveHighlight(document.querySelector(".tab.active"));
 async function create_job(entry, code) {
     const rest = await fetch("http://127.0.0.1:8000/jobs", {
         method: "POST",
@@ -94,6 +118,7 @@ function ChangeTab(tab) {
 
     if (tab === "stdout") { // So sánh đúng với '==='
         stdouttab.classList.add("active");
+
         document.getElementById("stdout").classList.add("active");
         document.getElementById("result").innerHTML = "Kết quả"; 
     } else if (tab === 'stderr') { // So sánh đúng với '==='
@@ -105,9 +130,14 @@ function ChangeTab(tab) {
         document.getElementById("result").innerHTML = "Trạng thái"; 
         document.getElementById("status").classList.add("active");
     }
+    const activeTabButton = document.querySelector(`[data-tab="${tab}"]`);
+    if (activeTabButton) {
+        activeTabButton.classList.add("active");
+    }
 }
 
 runbtn.addEventListener("click", async () => {
+    
     const code = code_input.value.trim(); // 'ariaValueText' thành 'value'
     const entry = "main.py";
     if (!code) {

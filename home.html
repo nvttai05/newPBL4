@@ -6,22 +6,47 @@
   <link rel="stylesheet" href="home.css" />
 </head>
 <body>
+ 
   <div class="container">
-    <div class="panel">
+    <div class="panel code-editor">
       <div class="panel-header">
         <h2>Code Editor</h2>
-        <button id="run-btn">▶ Run</button>
+        <div class="lang-select">
+            <button id="lang-prev" class="lang-btn">⟨</button>
+
+            <select id="language">
+                <option value="python">Python</option>
+                <option value="C">C</option>
+                <option value="java">Java</option>
+            </select>
+
+            <button id="lang-next" class="lang-btn">⟩</button>
+        </div>
+        <button id="run-btn">
+          <span>▶</span>
+          <span>R</span>
+          <span>u</span>
+          <span>n</span>
+        </button>
       </div>
       <textarea id="code-input" contenteditable="true" spellcheck="false" placeholder="Nhập code Python tại đây..."></textarea>
     </div>
+    
 
-    <div class="panel">
+    <div class="panel result">
       <div class="panel-header">
         <h2 id="result">Kết quả</h2>
         <div class="tabs">
-          <button class="tab" data-tab="stdout">STDOUT</button>
-          <button class="tab" data-tab="stderr">STDERR</button>
-          <button class="tab" data-tab="status">STATUS</button>
+          <div id="tab-highlight"></div>
+          <button class="tab active" data-tab="stdout">
+            <span>STDOUT</span>
+          </button>
+          <button class="tab" data-tab="stderr">
+            <span>STDERR</span>
+          </button>
+          <button class="tab" data-tab="status">
+            <span>STATUS</span>
+          </button>
         </div>
       </div>
       <div id="stdout" class="tab-content active">
