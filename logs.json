@@ -1,0 +1,1 @@
+{"stdout":"","stderr":"Running scope as unit: run-u247.scope\nTraceback (most recent call last):\n  File \"/home/nvttai05/Documents/sandboxpy/jobs/1762775454-ca5e2c/main.py\", line 1, in <module>\n    x = bytearray(100*1024*1024); print(\"allocated 100MB\")\nMemoryError\n"}

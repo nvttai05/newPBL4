@@ -1,0 +1,21 @@
+iso_strategy: ns_chroot_cgroups
+jobs_dir: "jobs"
+allow_network: false
+
+langs: ["python", "node", "bash"]
+
+runtimes:
+  python: "python3"
+  node: "node"
+  bash: "/bin/bash"
+
+db:
+  uri: "sqlite:///./sandbox.db"
+
+logging:
+  level: "INFO"
+
+seccomp:
+  enabled: true
+  policy_file: "seccomp.min.yaml"
+  mode: enforcing

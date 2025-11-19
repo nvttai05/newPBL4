@@ -1,0 +1,5 @@
+# Giới hạn tài nguyên mặc định cho mỗi job (có thể tinh chỉnh)
+cpu_seconds: 2               # tối đa CPU time (giây) cho process
+memory_bytes: 33554432      # 32 MB RAM
+nofile: 64                   # số FD tối đa (mở file/socket)
+wall_timeout_seconds: 10      # timeout tổng theo tường (wall-clock)

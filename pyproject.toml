@@ -1,0 +1,4 @@
+# Optional (dùng nếu bạn muốn poetry)
+[tool.black]
+line-length = 100
+target-version = ["py311"]
