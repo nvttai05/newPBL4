@@ -17,10 +17,10 @@
         <div class="lang-select">
           <button id="lang-prev" class="lang-btn">⟨</button>
 
+          <!-- Chỉ để những ngôn ngữ backend đã xử lý được -->
           <select id="language">
             <option value="python">Python</option>
-            <option value="C">C</option>
-            <option value="java">Java</option>
+            <option value="go">Go</option>
           </select>
 
           <button id="lang-next" class="lang-btn">⟩</button>
@@ -32,7 +32,12 @@
           <span>n</span>
         </button>
       </div>
-      <textarea id="code-input" contenteditable="true" spellcheck="false" placeholder="Nhập code Python tại đây..."></textarea>
+      <textarea
+        id="code-input"
+        contenteditable="true"
+        spellcheck="false"
+        placeholder="Nhập code Python tại đây..."
+      ></textarea>
     </div>
 
     <div class="panel result">
@@ -63,7 +68,7 @@
     </div>
   </div>
 
-  <!-- Liên kết với script.js, đảm bảo đã tải từ đúng thư mục tĩnh -->
+  <!-- Liên kết với script.js -->
   <script src="script.js"></script>
 </body>
 

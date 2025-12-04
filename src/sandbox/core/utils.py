@@ -11,5 +11,6 @@ def infer_lang_from_entry(entry: str) -> str:
     if entry.endswith(".py"):  return "python"
     if entry.endswith(".js"):  return "node"
     if entry.endswith(".sh"):  return "bash"
+    if entry.endswith(".go"):  return "go"
     # mở rộng dần: .c .cpp .java .go ...
     return "python"

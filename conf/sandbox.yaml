@@ -2,12 +2,13 @@ iso_strategy: ns_chroot_cgroups
 jobs_dir: "jobs"
 allow_network: false
 
-langs: ["python", "node", "bash"]
+langs: ["python", "node", "bash", "go"]
 
 runtimes:
   python: "python3"
   node: "node"
   bash: "/bin/bash"
+  go: "go"
 
 db:
   uri: "sqlite:///./sandbox.db"

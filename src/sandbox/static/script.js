@@ -1,4 +1,5 @@
 const Base_url = "http://127.0.0.1:8000";
+
 const runbtn = document.getElementById("run-btn");
 const code_input = document.getElementById("code-input");
 const stdouttext = document.getElementById("stdout-text");
@@ -13,21 +14,38 @@ const prevlang = document.getElementById("lang-prev");
 const nextlang = document.getElementById("lang-next");
 const highlight = document.getElementById("tab-highlight");
 
-// Điều chỉnh chuyển đổi ngôn ngữ
+// ------------------ Chuyển ngôn ngữ ------------------
 prevlang.addEventListener("click", () => {
     let index = langselect.selectedIndex;
     if (index > 0) {
         langselect.selectedIndex = index - 1;
+        onLanguageChange();
     }
 });
+
 nextlang.addEventListener("click", () => {
     let index = langselect.selectedIndex;
     if (index < langselect.options.length - 1) {
         langselect.selectedIndex = index + 1;
+        onLanguageChange();
     }
 });
 
-// Chuyển tab khi nhấn vào các tab
+// Khi chọn ngôn ngữ từ dropdown
+langselect.addEventListener("change", onLanguageChange);
+
+function onLanguageChange() {
+    const lang = langselect.value;
+    if (lang === "python") {
+        code_input.placeholder = "Nhập code Python tại đây...";
+    } else if (lang === "go") {
+        code_input.placeholder = "Nhập code Go tại đây...";
+    } else {
+        code_input.placeholder = "Nhập code tại đây...";
+    }
+}
+
+// ------------------ Tabs (stdout / stderr / status) ------------------
 tabs.forEach(tab => {
     tab.addEventListener("click", () => {
         const tabname = tab.getAttribute("data-tab");
@@ -45,17 +63,20 @@ function moveHighlight(activeTab) {
 }
 moveHighlight(document.querySelector(".tab.active"));
 
-async function create_job(entry, code) {
+// ------------------ API helpers ------------------
+async function create_job(entry, code, lang) {
     const rest = await fetch(`${Base_url}/jobs`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({ entry, code }),
+        body: JSON.stringify({ entry, code, lang }),
     });
 
     if (!rest.ok) {
-        throw new Error("Create job failed");
+        const errData = await rest.json().catch(() => ({}));
+        const message = errData.detail || "Create job failed";
+        throw new Error(message);
     }
 
     const data = await rest.json();
@@ -109,56 +130,68 @@ function Displaylog(Logs, status) {
 
 function ChangeTab(tab) {
     const alltab = document.querySelectorAll(".tab-content");
-    alltab.forEach(tab => {
-        tab.classList.remove("active");
+    alltab.forEach(tabEl => {
+        tabEl.classList.remove("active");
     });
-    tabs.forEach(tab => {
-        tab.classList.remove("active");
+    tabs.forEach(tabBtn => {
+        tabBtn.classList.remove("active");
     });
 
     if (tab === "stdout") {
         stdouttab.classList.add("active");
-        document.getElementById("stdout").classList.add("active");
         document.getElementById("result").innerHTML = "Kết quả";
     } else if (tab === "stderr") {
         stderrtab.classList.add("active");
         document.getElementById("result").innerHTML = "Lỗi";
-        document.getElementById("stderr").classList.add("active");
     } else if (tab === "status") {
         statustab.classList.add("active");
         document.getElementById("result").innerHTML = "Trạng thái";
-        document.getElementById("status").classList.add("active");
     }
+
     const activeTabButton = document.querySelector(`[data-tab="${tab}"]`);
     if (activeTabButton) {
         activeTabButton.classList.add("active");
+        moveHighlight(activeTabButton);
     }
 }
 
-// Sự kiện click nút "Run"
+// ------------------ Sự kiện click nút "Run" ------------------
 runbtn.addEventListener("click", async () => {
     const code = code_input.value.trim();
-    const entry = langselect.value || "python"; // Đảm bảo chọn ngôn ngữ từ select box
+    const lang = langselect.value || "python";
 
     if (!code) {
         alert("Nhập code đi đừng ngại nữa!");
         return;
     }
+
+    // Map lang -> entry (tên file gửi xuống backend)
+    let entry;
+    if (lang === "python") {
+        entry = "main.py";
+    } else if (lang === "go") {
+        entry = "main.go";
+    } else {
+        // fallback nếu sau này thêm ngôn ngữ khác mà chưa map
+        entry = "main.txt";
+    }
+
     stdouttext.textContent = "";
     stderrtext.textContent = "";
     statustext.textContent = "Đang tạo job...";
 
     try {
-        const jobid = await create_job(entry, code);
+        const jobid = await create_job(entry, code, lang);
         await runjob(jobid);
         pollJobStatus(jobid);
     } catch (error) {
         console.error(error);
         stderrtext.textContent = error.message || "Unknown error";
+        ChangeTab("stderr");
     }
 });
 
-// Poll trạng thái job
+// ------------------ Poll trạng thái job ------------------
 async function pollJobStatus(jobid) {
     const interval = setInterval(async () => {
         try {
@@ -177,6 +210,7 @@ async function pollJobStatus(jobid) {
     }, 600);
 }
 
+// ------------------ Hỗ trợ Tab trong textarea ------------------
 code_input.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
         event.preventDefault();
@@ -188,7 +222,8 @@ code_input.addEventListener("keydown", (event) => {
     }
 });
 
-// Hàm tô màu từ khóa trong code
+// ------------------ Tô màu từ khóa (simple) ------------------
+// Note: cái này vẫn hơi "Python-centric", nhưng không ảnh hưởng chạy code.
 function highlightKeywords(text) {
     const keywords = ['print', 'import', 'def', 'return', 'for', 'if', 'else', 'class'];
     keywords.forEach(keyword => {
@@ -199,7 +234,10 @@ function highlightKeywords(text) {
 }
 
 code_input.addEventListener("input", function () {
+    // Nếu bạn dùng <textarea>, phần này thực ra không hoạt động như contenteditable.
+    // Giữ nguyên logic cũ, hoặc sau này chuyển sang <div contenteditable>.
     let content = code_input.value;
     content = highlightKeywords(content);
-    code_input.innerHTML = content;
+    // Không gán innerHTML cho textarea, nên mình chỉ giữ value.
+    // Nếu bạn muốn highlight thật sự, cần đổi sang một editor khác.
 });

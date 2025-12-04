@@ -54,3 +54,135 @@ done
 
 # 4) Lấy logs
 curl -s http://127.0.0.1:8000/jobs/$JOB/logs
+
+
+
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"runtime/debug"
+)
+
+func main() {
+	fmt.Println("=== Go Runtime Info ===")
+	fmt.Println("Go version:", runtime.Version())
+	fmt.Println("OS:", runtime.GOOS)
+	fmt.Println("Arch:", runtime.GOARCH)
+	fmt.Println("CPUs:", runtime.NumCPU())
+	fmt.Println("GOMAXPROCS:", runtime.GOMAXPROCS(0))
+	fmt.Println("GOROOT:", runtime.GOROOT())
+
+	// build info (nếu build bằng module)
+	if info, ok := debug.ReadBuildInfo(); ok {
+		fmt.Println("Module path:", info.Path)
+		fmt.Println("Main module:", info.Main.Path, info.Main.Version)
+	}
+}
+
+
+package main
+
+import "fmt"
+
+func main() {
+	// fix cứng giá trị
+	a := 10.0
+	b := 3.0
+
+	fmt.Println("=== Simple Calculator ===")
+	fmt.Printf("a = %.2f, b = %.2f\n", a, b)
+
+	fmt.Printf("a + b = %.2f\n", a+b)
+	fmt.Printf("a - b = %.2f\n", a-b)
+	fmt.Printf("a * b = %.2f\n", a*b)
+
+	if b != 0 {
+		fmt.Printf("a / b = %.2f\n", a/b)
+	} else {
+		fmt.Println("a / b = khong the chia cho 0")
+	}
+}
+
+Syscall an toan 
+def test_syscall():
+    try:
+        # Mở một file và ghi một chuỗi vào đó
+        with open('test_file.txt', 'w') as f:
+            f.write('Đây là một ví dụ để test syscall an toàn!')
+        
+        with open('test_file.txt', 'r') as f:
+            content = f.read()
+            print(f"Đã đọc nội dung từ file: {content}")
+    
+    except Exception as e:
+        print(f"Lỗi xảy ra: {e}")
+
+test_syscall()
+
+
+Syscall nguy hiem 
+import socket
+
+def cause_socket_error():
+    try:
+        # Tạo một socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        # Cố gắng kết nối đến một địa chỉ không hợp lệ (vi phạm syscall)
+        s.connect(('256.256.256.256', 8080))  # Địa chỉ IP này không hợp lệ
+        
+    except socket.error as e:
+        print(f"Lỗi socket: {e}")
+
+cause_socket_error()
+
+
+
+Cap phat bo nho nguy hiem
+def test_memory_allocation():
+    try:
+        # Cố gắng cấp phát một lượng lớn bộ nhớ
+        large_array = bytearray(10**9)  # 1 GB
+        print("Đã cấp phát thành công 1 GB bộ nhớ.")
+    
+    except MemoryError:
+        print("Lỗi: Không thể cấp phát bộ nhớ - vượt quá giới hạn!")
+    
+    except Exception as e:
+        print(f"Lỗi xảy ra: {e}")
+
+
+PID 
+import multiprocessing
+
+def worker():
+    print(f"Process ID: {multiprocessing.current_process().pid}")
+
+def create_processes():
+    processes = []
+    for i in range(10):  # Giới hạn tạo 10 tiến trình
+        p = multiprocessing.Process(target=worker)
+        processes.append(p)
+        p.start()
+
+    for p in processes:
+        p.join()
+
+if __name__ == "__main__":
+    create_processes()
+
+ sudo nano /etc/polkit-1/rules.d/49-sandbox-systemd-run.rules 
+
+
+ thuc thi >20s
+import time
+
+def long_running_task():
+    print("Bắt đầu công việc tốn thời gian...")
+    time.sleep(25)  # Dừng 25 giây để mô phỏng công việc tốn thời gian
+    print("Công việc đã hoàn thành!")
+
+if __name__ == "__main__":
+    long_running_task()

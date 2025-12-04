@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from ..core.models import Job, Limits, Result, Status
 from ..core.settings import settings
@@ -8,32 +8,45 @@ from ..core.db import DB
 from ..core.utils import new_job_id, infer_lang_from_entry
 from .storage import LocalFSStorage
 from ..runner.python_runner import PythonRunner
+from ..runner.go_runner import GoRunner
 from ..isolation.isolation import IsolationPipeline, probe_capabilities
-
 
 
 class JobService:
     """
-    Orchestrator: ghép DB + Storage + Isolation pipeline + chọn runner theo ngôn ngữ.
+    Service chịu trách nhiệm:
+      - Tạo job (ghi code ra filesystem, insert DB)
+      - Chạy job trong sandbox (isolation + rlimits)
+      - Đọc status và logs của job
     """
 
-    def __init__(self):
-        # DB nhúng (SQLite)
+    def __init__(self) -> None:
+        # DB
         self.db = DB(Path("sandbox.db"))
 
         # FS storage
         self.storage = LocalFSStorage(settings.jobs_dir)
 
-        # Runners khả dụng
-        self.python = PythonRunner(
-            python_bin=settings.sandbox.get("runtimes", {}).get("python", "python3")
-        )
-        # TODO: thêm Node/Bash runner sau
+        # Runtimes từ conf/sandbox.yaml
+        rt = settings.sandbox.get("runtimes", {})
 
-        # Isolation pipeline (ns/chroot, cgroups, seccomp)
+        # Runners khả dụng, map theo lang
+        self.runners = {
+            "python": PythonRunner(
+                python_bin=rt.get("python", "python3")
+            ),
+            "go": GoRunner(
+                go_bin=rt.get("go", "go")
+            ),
+            # sau này có thể thêm:
+            # "node": NodeRunner(node_bin=rt.get("node", "node")),
+            # "bash": BashRunner(...),
+        }
+
+        # Isolation pipeline (ns/chroot, cgroups)
         self.iso = IsolationPipeline(
             strategy=settings.sandbox.get("iso_strategy", "none"),
-            allow_network=bool(settings.sandbox.get("allow_network", False))
+            allow_network=bool(settings.sandbox.get("allow_network", False)),
         )
 
     def _limits(self) -> Limits:
@@ -45,9 +58,22 @@ class JobService:
             wall_timeout_seconds=int(lim.get("wall_timeout_seconds", 5)),
         )
 
-    def create_job(self, entry: str, code: str) -> str:
+    def _normalize_lang(self, entry: str, lang: Optional[str]) -> str:
+        # ưu tiên lang truyền vào, nếu không có thì infer từ entry
+        normalized = (lang or "").lower().strip()
+        if not normalized:
+            normalized = infer_lang_from_entry(entry)
+        return normalized
+
+    def create_job(self, entry: str, code: str, lang: Optional[str] = None) -> str:
+        """
+        Tạo job mới:
+          - chuẩn hóa lang
+          - tạo workspace + ghi code
+          - insert DB record
+        """
         job_id = new_job_id()
-        lang = infer_lang_from_entry(entry)
+        lang = self._normalize_lang(entry, lang)
 
         ws = self.storage.create_workspace(job_id)
         script_path = ws / entry
@@ -57,59 +83,62 @@ class JobService:
         self.db.insert_job(job_id, lang=lang, entry=entry)
         return job_id
 
-    def run_job(self, job_id: str) -> None:
-        row = self.db.get_job(job_id)
-        if not row:
-            raise ValueError("job_not_found")
-
-        self.db.set_running(job_id)
-
+    def _build_job_from_row(self, job_id: str, row: Dict) -> Job:
         ws_abs = (settings.jobs_dir / job_id).resolve()
         ws_abs.mkdir(parents=True, exist_ok=True)
-
         script_abs = ws_abs / row["entry"]
         if not script_abs.exists():
             raise ValueError(f"script_not_found:{script_abs}")
 
-        job = Job(
+        return Job(
             job_id=job_id,
             lang=row["lang"],
             entry=row["entry"],
             workspace=ws_abs,
             script_path=script_abs,
         )
+
+    def _diag_planned_cmd(self, job: Job, wrap_cmd):
+        """
+        Tính trước lệnh dự kiến sẽ chạy (chỉ để ghi vào meta cho debug).
+        Không ảnh hưởng đến việc thực thi thực tế.
+        """
+        try:
+            if job.lang == "python":
+                base_cmd = [self.runners["python"].python_bin, str(job.script_path)]
+            elif job.lang == "go":
+                base_cmd = [self.runners["go"].go_bin, "run", str(job.script_path)]
+            else:
+                base_cmd = ["<unsupported_lang>"]
+
+            return wrap_cmd(base_cmd) if wrap_cmd else base_cmd
+        except Exception:
+            return ["<wrap_cmd_error>"]
+
+    def run_job(self, job_id: str) -> None:
+        row = self.db.get_job(job_id)
+        if not row:
+            raise ValueError("job_not_found")
+
+        # set trạng thái RUNNING
+        self.db.set_running(job_id)
+
+        job = self._build_job_from_row(job_id, row)
         limits = self._limits()
 
         # Xây pipeline isolation
         wrap_cmd, preexec = self.iso.build(job, limits)
 
-        # === DIAG: tính lệnh thực tế + khả năng môi trường ===
-        planned_cmd = None
-        try:
-            base_cmd = (
-                [self.python.python_bin, str(job.script_path)]
-                if job.lang == "python"
-                else ["<unsupported_lang>"]
-            )
-            planned_cmd = wrap_cmd(base_cmd) if wrap_cmd else base_cmd
-        except Exception:
-            planned_cmd = ["<wrap_cmd_error>"]
-
+        # === DIAG: tính lệnh thực tế + capabilities môi trường ===
+        planned_cmd = self._diag_planned_cmd(job, wrap_cmd)
         caps = probe_capabilities(
             allow_network=bool(settings.sandbox.get("allow_network", False)),
             strategy=settings.sandbox.get("iso_strategy", "none"),
         )
 
         # Chạy runner theo ngôn ngữ
-        if job.lang == "python":
-            res = self.python.run(
-                job,
-                limits,
-                env={"PYTHONUNBUFFERED": "1"},
-                wrap_cmd=wrap_cmd,
-                preexec=preexec,
-            )
-        else:
+        runner = self.runners.get(job.lang)
+        if runner is None:
             res = Result(
                 status=Status.FAILED,
                 rc=1,
@@ -117,6 +146,18 @@ class JobService:
                 stdout="",
                 stderr=f"language '{job.lang}' is not supported yet",
                 duration_s=0.0,
+            )
+        else:
+            env: Dict[str, str] = {}
+            if job.lang == "python":
+                env["PYTHONUNBUFFERED"] = "1"
+
+            res = runner.run(
+                job,
+                limits,
+                env=env,
+                wrap_cmd=wrap_cmd,
+                preexec=preexec,
             )
 
         # Ghi meta có kèm DIAG
@@ -128,8 +169,8 @@ class JobService:
             "duration_s": res.duration_s,
             "limits_applied": limits.__dict__,
             "strategy": settings.sandbox.get("iso_strategy", "none"),
-            "planned_cmd": planned_cmd,  # <=== thêm
-            "capabilities": caps,  # <=== thêm
+            "planned_cmd": planned_cmd,
+            "capabilities": caps,
         }
         self.storage.save_artifacts(job.job_id, res.stdout, res.stderr, meta)
 
