@@ -1,8 +1,8 @@
-# sandboxpy (sườn FULL)
-- API giữ đúng RuleFE: /jobs endpoints
+# sandboxpy
+- API : /jobs endpoints
 - Tầng bảo mật: rlimits → ns/chroot → cgroups → seccomp
-- DB nhúng: SQLite
-- Đa ngôn ngữ: Python (Node runner để sẵn)
+- DB nhúng: SQLite (Chạy code sẽ tự tạo ra sandbox.db)
+- Đa ngôn ngữ: Python
 
 ## Dev quickstart
 python3 -m venv .venv && source .venv/bin/activate
@@ -56,7 +56,7 @@ done
 curl -s http://127.0.0.1:8000/jobs/$JOB/logs
 
 
-
+#Test Golang
 package main
 
 import (
@@ -105,7 +105,7 @@ func main() {
 	}
 }
 
-Syscall an toan 
+# Test Syscall an toan 
 def test_syscall():
     try:
         # Mở một file và ghi một chuỗi vào đó
@@ -122,7 +122,7 @@ def test_syscall():
 test_syscall()
 
 
-Syscall nguy hiem 
+#Test Syscall nguy hiem 
 import socket
 
 def cause_socket_error():
@@ -140,7 +140,7 @@ cause_socket_error()
 
 
 
-Cap phat bo nho nguy hiem
+#Test Cap phat bo nho nguy hiem
 def test_memory_allocation():
     try:
         # Cố gắng cấp phát một lượng lớn bộ nhớ
@@ -154,7 +154,7 @@ def test_memory_allocation():
         print(f"Lỗi xảy ra: {e}")
 
 
-PID 
+#Test PID 
 import multiprocessing
 
 def worker():
